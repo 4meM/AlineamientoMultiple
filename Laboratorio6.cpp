@@ -6,13 +6,12 @@
 #include <fstream>
 #include <iterator>
 #include <chrono>
+#include "Needleman_Wunsch.h"
 
 using namespace std;
 using Mat = vector<vector<float>>;
 using TreeGuia = vector<string*>;
-#define missMatch 1
-#define match 0
-#define gap 1
+
 
 
 struct cluster{
@@ -24,101 +23,7 @@ using clusterHash = unordered_map<cluster*,map<cluster*, float>>;
 clusterHash clustersMap;
 
 
-void readFastaFile(string archivo, map<string,string>& almacen){
-    fstream fastaFile(archivo); 
-    bool id_get = false;
-    if(!fastaFile.is_open()){
-        cout << "NO SE PUEDO ABRIR EL ARCHIVO " << archivo << "\n";
-        return;
-    }
-    string line,ID;
-    while(getline(fastaFile,line).good()){
-        id_get = false;
-        if(line[0] == '>'){
-            ID = "";
-            for(int i = 1; i < line.size(); i++){
-                if(line[i] == ' ' ){
-                    id_get = true;
-                    break;
-                }
-                ID += line[i];
-            }
-        }
-        if(!id_get) almacen[ID] += line;
-    }
-}
 
-void Needleman_Wunsch(Mat& memorization, string& chain1, string& chain2){
-    float gap_ = gap;
-    for(int i = 1; i < memorization.size(); i++){
-        for(int j = 1; j < memorization[0].size(); j++){
-            float maximo = 0;
-            maximo = memorization[i - 1][j - 1] + (chain1[i - 1] == chain2[j - 1]? match : missMatch);
-            maximo = min(memorization[i - 1][j] + gap_, maximo);
-            maximo = min(memorization[i][j - 1] + gap_, maximo);
-            memorization[i][j] = maximo;
-        }
-    } 
-}
-
-bool equal(float a, float b){
-    return abs(a - b) < 0.0001f;
-}
-
-pair<string,string> trackeBackNeedleman_Wunsch(Mat& memorization,string chain1,string chain2){
-    pair<string, string> ans;
-    int i = memorization.size() - 1;
-    int j = memorization[0].size() - 1;
-    while(i > 0 && j > 0){
-            float missOrMatch = (chain1[i - 1] == chain2[j - 1] ? match : missMatch);
-            
-            // Diagonal
-            if(equal(memorization[i][j], memorization[i - 1][j - 1] + missOrMatch)){
-                ans.first = chain1[i - 1] + ans.first;
-                ans.second = chain2[j - 1] + ans.second;
-                i--;
-                j--;
-            }
-            // Condición Arriba (Gap en chain 2)
-            else if(equal(memorization[i][j], memorization[i - 1][j] + gap)){ 
-                ans.first = chain1[i - 1] + ans.first;
-                ans.second = "-" + ans.second;
-                i--;
-            }
-            // Condición Izquierda (Gap en chain 1)
-            else if(equal(memorization[i][j], memorization[i][j - 1] + gap)){ 
-                ans.first = "-" + ans.first;
-                ans.second = chain2[j - 1] + ans.second; 
-                j--;
-
-            }
-            else{
-                cout << "NO ENTRO EN NINGUN CASO\n";
-                return ans;
-            }
-    }
-    while(i > 0){
-        ans.first  = chain1[i-1] + ans.first;
-        ans.second = "-" + ans.second;
-        i--;
-    }
-
-    while(j > 0){
-        ans.first  = "-" + ans.first;
-        ans.second = chain2[j-1] + ans.second;
-        j--;
-    }
-   return ans;
-}
-
-void initialization(Mat& memorization){
-    for(int i = 0; i < memorization.size(); i++){
-        memorization[i][0] = i * gap;
-    }
-    for(int j = 0; j < memorization[0].size(); j++){
-        memorization[0][j] = j * gap;
-    }
-}
 
 void distanceClusters(vector<string>& chains){
     vector<cluster*> clusters; 
@@ -218,6 +123,44 @@ void TreeGuide(vector<string>& chains){
     }
 }
 
+
+void AlineamientoMultiple(){
+    for(int i=0 ; i<clustersMap.begin()->first->orden.size(); i++){
+        float distance_min=numeric_limits<float>::max();
+        pair<string,string> alignedChains_aux;
+        pair<cluster*, cluster*> order = clustersMap.begin()->first->orden[i];
+        for(int j=0; j<order.first->chains.size(); j++){
+            for(int k=0; k<order.second->chains.size();k++){
+                Mat memorization(order.first->chains[j]->size() + 1, vector<float>(order.second->chains[k]->size() + 1,0));
+                initialization(memorization);
+                Needleman_Wunsch(memorization,*order.first->chains[j],*order.second->chains[k]);
+                pair<string,string> alignedChains = trackeBackNeedleman_Wunsch(memorization,*order.first->chains[j],*order.second->chains[k]);
+                cout << "Alineamiento entre " << *order.first->chains[j] << " y " << *order.second->chains[k] << ":\n";
+                cout << alignedChains.first << "\n";
+                cout << alignedChains.second << "\n\n";
+
+                distance_min = min(distance_min, memorization[memorization.size() - 1][memorization[0].size() - 1]);
+                cout<<"distance: "<<distance_min<<'\n';
+                alignedChains_aux = alignedChains;
+            }
+        }
+        for(int j=0; j<alignedChains_aux.first.size(); j++){
+            if(alignedChains_aux.first[j] != '-' && alignedChains_aux.second[j] != '-'){
+                alignedChains_aux.first[j] ='X' ; alignedChains_aux.second[j] = 'X';
+            }
+             else if(alignedChains_aux.first[j] != '-' && alignedChains_aux.second[j] == '-'){
+                alignedChains_aux.first[j]= 'X' ;
+            }
+            else if(alignedChains_aux.first[j] == '-' && alignedChains_aux.second[j] != '-'){
+                alignedChains_aux.second[j]= 'X' ;
+            }
+        }
+
+
+    }
+
+}
+
 int main(){
     vector<string> chains;
     chains.push_back("ATTTACGCCT");
@@ -233,8 +176,12 @@ int main(){
         for(const auto& pairOrden : entry.first->orden){
             if(pairOrden.first != nullptr && pairOrden.second != nullptr){
                 cout << "Orden direccion: " << pairOrden.first << " - " << pairOrden.second << "\n";
+
             }
+
         }
+
     }
+    AlineamientoMultiple();
     return 0;
 }
