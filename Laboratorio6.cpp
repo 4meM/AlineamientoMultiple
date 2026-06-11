@@ -17,6 +17,7 @@ using TreeGuia = vector<string*>;
 
 struct cluster{
     vector<string*> chains;
+    vector<pair<cluster*,cluster*>> orden;
 };
 
 using clusterHash = unordered_map<cluster*,map<cluster*, float>>;
@@ -119,41 +120,11 @@ void initialization(Mat& memorization){
     }
 }
 
-/*Mat fillDistance(vector<string> chains){
-    Mat distances(chains.size(), vector<float>(chains.size(), 0));
-    for(int i = 0; i < chains.size(); i++){
-        string chain1 = chains[i];
-        for(int j = i + 1; j < chains.size(); j++){
-            string chain2 = chains[j];
-            Mat memorization(chain1.size() + 1, vector<float>(chain2.size() + 1,0));
-            initialization(memorization);
-            Needleman_Wunsch(memorization,chain1,chain2);
-            distances[i][j] = memorization[memorization.size() - 1][memorization[0].size() - 1];
-            distances[j][i] = distances[i][j];
-        }
-    }
-    return distances;
-}
-
-pair<int,int> findMinDistance(Mat distances){
-    int min_i = 0, min_j = 0;
-    float min_distance = numeric_limits<float>::max();
-
-    for(int i = 0; i < distances.size(); i++){
-        for(int j = i + 1; j < distances.size(); j++){
-            if(distances[i][j] < min_distance){
-                min_distance = distances[i][j];
-                min_i = i;
-                min_j = j;
-            }
-        }
-    }
-    return {min_i, min_j};
-}*/
 void distanceClusters(vector<string>& chains){
     vector<cluster*> clusters; 
     for(int i = 0; i < chains.size(); i++){
         cluster* newCluster = new cluster();
+        newCluster->orden.push_back({nullptr, nullptr});
         newCluster->chains.push_back(&chains[i]);
         clusters.push_back(newCluster);
     }
@@ -194,8 +165,21 @@ void mergeClusters(cluster*c1, cluster* c2){
     cluster* newCluster = new cluster();
     newCluster->chains.insert(newCluster->chains.end(), c1->chains.begin(), c1->chains.end());
     newCluster->chains.insert(newCluster->chains.end(), c2->chains.begin(), c2->chains.end());
+    for(const auto& order : c1->orden){
+        if(order.first != nullptr && order.second != nullptr){
+            newCluster->orden.push_back({order.first, order.second});
+        }
+    }
+    for(const auto& order : c2->orden){
+        if(order.first != nullptr && order.second != nullptr){
+            newCluster->orden.push_back({order.first, order.second});
+        }
+    }
+    newCluster->orden.push_back({c1, c2});
+
     if(clustersMap.size() == 2){
         clustersMap[newCluster] = {};
+
         clustersMap.erase(c1);
         clustersMap.erase(c2);
         return;
@@ -236,17 +220,20 @@ void TreeGuide(vector<string>& chains){
 
 int main(){
     vector<string> chains;
-    chains.push_back("ATTGGCACCA");
-    chains.push_back("ATTTGGACCA");
-    chains.push_back("TGGTTCCA");
-    chains.push_back("ATTCCACCAC");
+    chains.push_back("ATTTACGCCT");
+    chains.push_back("TTAAGCCAT");
+    chains.push_back("TTAATTAACC");
+    chains.push_back("ATTTTCCGGA");
+    chains.push_back("AATTTACCGCCT");
     TreeGuide(chains); 
     cout << "Proceso de clustering completado.\n";
     cout << "Numero de clusters finales: " << clustersMap.size() << "\n";
     for(const auto& entry : clustersMap){
-        cout << "Cluster con " << entry.first->chains.size() << " cadenas.\n";
-        for(const auto& chainPtr : entry.first->chains){
-            cout << " - " << *chainPtr << "\n";
+        cout << "Cluster con " << entry.first->orden.size() << " ordenes.\n";
+        for(const auto& pairOrden : entry.first->orden){
+            if(pairOrden.first != nullptr && pairOrden.second != nullptr){
+                cout << "Orden direccion: " << pairOrden.first << " - " << pairOrden.second << "\n";
+            }
         }
     }
     return 0;
