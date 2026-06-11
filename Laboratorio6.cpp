@@ -37,7 +37,7 @@ void distanceClusters(vector<string>& chains){
     for(int i = 0; i < clusters.size(); i++){
         for(int j = i + 1; j < clusters.size(); j++){
             Mat memorization(clusters[i]->chains[0]->size() + 1, vector<float>(clusters[j]->chains[0]->size() + 1,0));
-            initialization(memorization);
+            initialization(memorization, *clusters[i]->chains[0], *clusters[j]->chains[0]);
             Needleman_Wunsch(memorization,*clusters[i]->chains[0],*clusters[j]->chains[0]);
             float distance = memorization[memorization.size() - 1][memorization[0].size() - 1];
             clustersMap[clusters[i]][clusters[j]] = distance;
@@ -119,46 +119,104 @@ void TreeGuide(vector<string>& chains){
     while(clustersMap.size() > 1){
         pair<cluster*, cluster*> minClusters = findMinDistanceCluster();
         mergeClusters(minClusters.first, minClusters.second);
-        cout << "Clusters fusionados. Clusters restantes: " << clustersMap.size() << "\n";
     }
 }
 
 
-void AlineamientoMultiple(){
-    for(int i=0 ; i<clustersMap.begin()->first->orden.size(); i++){
-        float distance_min=numeric_limits<float>::max();
-        pair<string,string> alignedChains_aux;
+void AlineamientoMultiple() {
+    for (int i = 0; i < clustersMap.begin()->first->orden.size(); i++) {
+
+        float distance_min = numeric_limits<float>::max();
+        pair<string, string> alignedChains_aux;
         pair<cluster*, cluster*> order = clustersMap.begin()->first->orden[i];
-        for(int j=0; j<order.first->chains.size(); j++){
-            for(int k=0; k<order.second->chains.size();k++){
-                Mat memorization(order.first->chains[j]->size() + 1, vector<float>(order.second->chains[k]->size() + 1,0));
-                initialization(memorization);
-                Needleman_Wunsch(memorization,*order.first->chains[j],*order.second->chains[k]);
-                pair<string,string> alignedChains = trackeBackNeedleman_Wunsch(memorization,*order.first->chains[j],*order.second->chains[k]);
-                cout << "Alineamiento entre " << *order.first->chains[j] << " y " << *order.second->chains[k] << ":\n";
-                cout << alignedChains.first << "\n";
-                cout << alignedChains.second << "\n\n";
 
-                distance_min = min(distance_min, memorization[memorization.size() - 1][memorization[0].size() - 1]);
-                cout<<"distance: "<<distance_min<<'\n';
-                alignedChains_aux = alignedChains;
+        for (int j = 0; j < order.first->chains.size(); j++) {
+
+            for (int k = 0; k < order.second->chains.size(); k++) {
+
+                Mat memorization(
+                    order.first->chains[j]->size() + 1,
+                    vector<float>(order.second->chains[k]->size() + 1, 0)
+                );
+
+                initialization(memorization, *order.first->chains[j], *order.second->chains[k]);
+
+                Needleman_Wunsch(
+                    memorization,
+                    *order.first->chains[j],
+                    *order.second->chains[k]
+                );
+
+                pair<string, string> alignedChains =
+                    trackeBackNeedleman_Wunsch(
+                        memorization,
+                        *order.first->chains[j],
+                        *order.second->chains[k]
+                    );
+
+                if (distance_min >
+                    memorization[memorization.size() - 1][memorization[0].size() - 1]) {
+
+                    distance_min =
+                        memorization[memorization.size() - 1][memorization[0].size() - 1];
+
+                    alignedChains_aux = alignedChains;
+                }
             }
         }
-        for(int j=0; j<alignedChains_aux.first.size(); j++){
-            if(alignedChains_aux.first[j] != '-' && alignedChains_aux.second[j] != '-'){
-                alignedChains_aux.first[j] ='X' ; alignedChains_aux.second[j] = 'X';
-            }
-             else if(alignedChains_aux.first[j] != '-' && alignedChains_aux.second[j] == '-'){
-                alignedChains_aux.first[j]= 'X' ;
-            }
-            else if(alignedChains_aux.first[j] == '-' && alignedChains_aux.second[j] != '-'){
-                alignedChains_aux.second[j]= 'X' ;
+        cout << "\n";
+        cout << "Cadena alineada 1: " << "\n";
+        cout << alignedChains_aux.first << "\n";
+        cout << "\n";
+        cout << "Cadena alineada 2: " << "\n"; 
+        cout << alignedChains_aux.second << "\n";
+        cout << "\n";
+        cout << "\n";
+        for (int j = 0; j < order.first->chains.size(); j++) {
+
+            int pointer = 0;
+
+            for (int k = 0; k < alignedChains_aux.first.size(); k++) {
+
+                if (alignedChains_aux.first[k] == '-') {
+
+                    if (pointer <= order.first->chains[j]->size()) {
+                        order.first->chains[j]->insert(
+                            order.first->chains[j]->begin() + pointer,
+                            'X'
+                        );
+                    } else {
+                        order.first->chains[j]->push_back('X');
+                    }
+                }
+
+                pointer++;
             }
         }
 
+        // Insertar gaps en las cadenas del segundo cluster
+        for (int j = 0; j < order.second->chains.size(); j++) {
 
+            int pointer = 0;
+
+            for (int k = 0; k < alignedChains_aux.second.size(); k++) {
+
+                if (alignedChains_aux.second[k] == '-') {
+
+                    if (pointer <= order.second->chains[j]->size()) {
+                        order.second->chains[j]->insert(
+                            order.second->chains[j]->begin() + pointer,
+                            'X'
+                        );
+                    } else {
+                        order.second->chains[j]->push_back('X');
+                    }
+                }
+
+                pointer++;
+            }
+        }
     }
-
 }
 
 int main(){
@@ -169,19 +227,9 @@ int main(){
     chains.push_back("ATTTTCCGGA");
     chains.push_back("AATTTACCGCCT");
     TreeGuide(chains); 
-    cout << "Proceso de clustering completado.\n";
-    cout << "Numero de clusters finales: " << clustersMap.size() << "\n";
-    for(const auto& entry : clustersMap){
-        cout << "Cluster con " << entry.first->orden.size() << " ordenes.\n";
-        for(const auto& pairOrden : entry.first->orden){
-            if(pairOrden.first != nullptr && pairOrden.second != nullptr){
-                cout << "Orden direccion: " << pairOrden.first << " - " << pairOrden.second << "\n";
-
-            }
-
-        }
-
-    }
     AlineamientoMultiple();
+    for(const auto& entry : clustersMap.begin()->first->chains){
+        cout << "Cadena alineada: " << *entry << "\n";
+    } 
     return 0;
 }
